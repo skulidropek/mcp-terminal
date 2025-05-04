@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { existsSync } from "fs";
 
 export interface ServerConfig {
   command: string; // Полная строка команды ИЛИ "sse"
@@ -13,16 +14,43 @@ export interface ConfigShape {
 export class ConfigManager {
   private static data: ConfigShape;
 
-  static load(configPath = resolve("mcpServers.json")): void {
-    const fileContent = readFileSync(configPath, "utf-8");
+  static load(configPath?: string): void {
+    let resolvedPath;
+    
+    if (configPath) {
+      resolvedPath = resolve(configPath);
+    } else {
+      // Сначала пробуем текущую директорию
+      resolvedPath = resolve("mcpServers.json");
+      
+      // Если в текущей директории нет, проверяем путь относительно директории модуля
+      if (!existsSync(resolvedPath)) {
+        const moduleDir = __dirname;
+        // Поднимаемся на 3 уровня: config -> client -> src (или dist) -> корень проекта
+        const projectRoot = join(moduleDir, '..', '..', '..');
+        resolvedPath = join(projectRoot, "mcpServers.json");
+      }
+      
+      // Если и в директории проекта нет, пробуем домашнюю директорию
+      if (!existsSync(resolvedPath)) {
+        resolvedPath = resolve(process.env.HOME || process.env.USERPROFILE || '', "mcpServers.json");
+      }
+    }
+    
+    if (!existsSync(resolvedPath)) {
+      throw new Error(`Cannot find mcpServers.json at ${resolvedPath}`);
+    }
+    
+    const fileContent = readFileSync(resolvedPath, "utf-8");
     const parsedData = JSON.parse(fileContent);
     
     // Проверка, что корневой ключ именно mcpServers
     if (!parsedData || typeof parsedData !== 'object' || !parsedData.mcpServers) {
-      throw new Error(`Invalid config format: Missing "mcpServers" root key in ${configPath}`);
+      throw new Error(`Invalid config format: Missing "mcpServers" root key in ${resolvedPath}`);
     }
     
     ConfigManager.data = parsedData as ConfigShape;
+    console.log(`Successfully loaded config from ${resolvedPath}`);
   }
 
   static get(server: string): ServerConfig {
