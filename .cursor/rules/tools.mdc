@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Ты работаешь только с инструментов mcp_run_terminal_cmd
+
+# Available MCP Tools
+
+This document describes the MCP (Model Context Protocol) tools available in the current project, fetched from configured servers.
+
+You can call these tools using the CLI client:
+`node dist/client/index.js <server_name> <tool_name> [arguments...]`
+
+## Server: ton
+*   **call_method**
+    *   Description: Call TON API method from any module. Specify module and method names. Parameters can be passed as a JSON object in 'params' or as array in 'args'. Query data similar to https://tonscan.org or https://tonviewer.com explorers. Example: view account at https://testnet.tonscan.org/address/EQBInPs62kcCSGDwnCTx0FLzgNpu_t6sTca-mOXInYPBISzT
+    *   Example CLI Call: `node dist/client/index.js ton call_method '{"module": "blockchain", "method": "getAccount", "params": {"account_id": "<some_ton_address>"}}'`
+*   **list_modules**
+    *   Description: List all TON API modules. Includes 'blockchain' for data shown on https://tonscan.org, 'accounts' for wallet info as displayed on https://tonviewer.com.
+    *   Example CLI Call: `node dist/client/index.js ton list_modules `
+*   **list_methods**
+    *   Description: List all methods in a specific TON API module. Get methods for querying data that appears on https://tonscan.org or https://tonviewer.com explorers.
+    *   Example CLI Call: `node dist/client/index.js ton list_methods '{"module": "blockchain"}'`
+
+## Server: mcp-terminal
+*   **mcp_run_terminal_cmd**
+    *   Description: Execute a shell command locally. Handles foreground/background execution.
+    *   Example CLI Call: `node dist/client/index.js mcp-terminal mcp_run_terminal_cmd '{"command":"ls -la","explanation":"List files","is_background":false}'`
+
+## Server: python-time
+*   **get_current_time**
+    *   Description: Get current time in a specific timezones
+    *   Example CLI Call: `node dist/client/index.js python-time get_current_time [args...]`
+*   **convert_time**
+    *   Description: Convert time between timezones
+    *   Example CLI Call: `node dist/client/index.js python-time convert_time [args...]`
+
