@@ -55,7 +55,7 @@ const jsonSchemaOptions = {
 
 const runTerminalCmdTool: z.infer<typeof ToolSchema> = {
     name: "mcp_run_terminal_cmd",
-    description: "Execute a shell command locally. Handles foreground/background execution and user approval.",
+    description: "Execute a shell command locally. Handles foreground/background execution.",
     // Generate schema with explicit options and cast to a compatible object type
     // Assuming ToolSchema.shape.inputSchema expects an object with at least a 'type' field
     inputSchema: zodToJsonSchema(RunTerminalCmdArgsSchema, jsonSchemaOptions) as { type: 'object', [key: string]: any },
@@ -136,11 +136,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequestT
 
         switch (executionOutcome.status) {
             case 'success':
-                return {
-                    toolCallId: toolCallId,
-                    content: [{ type: "text", text: JSON.stringify(executionOutcome.result) }]
-                };
-            case 'waiting':
                 return {
                     toolCallId: toolCallId,
                     content: [{ type: "text", text: JSON.stringify(executionOutcome.result) }]

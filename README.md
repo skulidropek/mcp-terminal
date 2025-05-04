@@ -1,16 +1,29 @@
 # MCP Terminal Server
 
-Implements the `run_terminal_cmd` tool for the Model Context Protocol (MCP) over standard input/output (stdio).
+A simple server implementing the Model Context Protocol for terminal command execution.
 
 ## Features
 
-*   Acts as an MCP server communicating via stdio.
-*   Provides the `run_terminal_cmd` tool.
-    *   Executes shell commands locally.
-    *   Supports command approval workflow (`require_user_approval`).
-    *   Handles background command execution (`is_background`).
-    *   Includes timeouts and output truncation.
-    *   Supports automatic command approval via configuration.
+*   Execute shell commands from language models or other clients.
+*   Background execution support for long-running commands.
+*   Command output truncation when exceeding buffer limits.
+*   Security configuration to control command execution.
+
+## Architecture Overview
+
+This server provides a simple interface for executing shell commands via the MCP Protocol.
+
+```
+┌─────────────┐    MCP Protocol    ┌───────────────────┐        ┌─────────────┐
+│ LLM / Agent ├───────────────────►│ MCP Terminal Svr  ├────────► Local Shell │
+└─────────────┘     via stdio      └───────────────────┘   exec  └─────────────┘
+```
+
+The server is meant to be run as a child process of an LLM agent or orchestrator. It communicates via the MCP Protocol over stdio. This implementation is particularly useful for scenarios where LLM agents need to interact with the local system.
+
+## Command Auto-Approval Configuration
+
+The server can be configured to automatically approve certain commands.
 
 ## Prerequisites
 
@@ -70,7 +83,7 @@ docker compose exec -it mcp-terminal /bin/sh # Example: opens a shell
 
 ## Configuration
 
-The server can be configured to automatically approve certain commands, eliminating the need for explicit user confirmation when `require_user_approval` is set to `true`.
+The server can be configured to automatically approve or deny certain commands based on patterns.
 
 Configuration is loaded from a JSON file specified with the `--file` command-line argument:
 
@@ -91,17 +104,18 @@ node dist/server.js --file autorun.json
 }
 ```
 
-- `enabled`: Enables/disables the auto-approval feature
-- `allowlist`: Array of command substrings that will be automatically approved
-- `denylist`: Array of command substrings that will never be auto-approved (overrides allowlist)
-- `allow_all_other_commands`: If true, all commands not in the denylist will be auto-approved
+- `enabled`: Enables/disables the security feature
+- `allowlist`: Array of command substrings that will be automatically allowed
+- `denylist`: Array of command substrings that will never be allowed (overrides allowlist)
+- `allow_all_other_commands`: If true, all commands not in the denylist will be allowed
 
-### Auto-Approval Logic
+### Security Logic
 
-1. If `enabled` is `false`, no commands are auto-approved
-2. Check if the command contains any substring in the `denylist` - if so, deny auto-approval
-3. Check if the command contains any substring in the `allowlist` - if so, approve
-4. Use `allow_all_other_commands` setting as the default
+1. If `enabled` is `false`, only check against the denylist 
+2. If `enabled` is `true` and `allow_all_other_commands` is `true`, only commands in the denylist are rejected
+3. Otherwise, check if the command contains any substring in the `denylist` - if so, reject it
+4. Check if the command contains any substring in the `allowlist` - if so, allow it
+5. Use `allow_all_other_commands` setting as the default
 
 ## Usage (MCP Interaction)
 
@@ -118,12 +132,7 @@ A client application (like an AI agent orchestrator) would typically manage this
 
     *   **Call `run_terminal_cmd` (Example):**
         ```json
-        {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"mcp_run_terminal_cmd","id":"call_123","arguments":{"command":"echo Hello MCP","explanation":"Simple echo command","is_background":false,"require_user_approval":false}}}
-        ```
-
-    *   **Call `run_terminal_cmd` (Requiring Approval):**
-        ```json
-        {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"mcp_run_terminal_cmd","id":"call_abc","arguments":{"command":"ls -la","explanation":"List files","is_background":false,"require_user_approval":true}}}
+        {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"mcp_run_terminal_cmd","id":"call_123","arguments":{"command":"echo Hello MCP","explanation":"Simple echo command","is_background":false}}}
         ```
 
 3.  **Receive MCP Responses (as JSON lines) from server's stdout:**
@@ -133,15 +142,10 @@ A client application (like an AI agent orchestrator) would typically manage this
         ```json
         {"jsonrpc":"2.0","id":2,"result":{"toolCallId":"call_123","content":[{"type":"text","text":"{\"stdout\":\"Hello MCP\\n\",\"stderr\":\"\",\"exitCode\":0}"}]}}
         ```
-    *   **Call Tool Response (Waiting):**
+    *   **Call Tool Response (Error):** 
         ```json
-        {"jsonrpc":"2.0","id":3,"result":{"toolCallId":"call_abc","content":[{"type":"text","text":"{\"status\":\"waiting_for_approval\"}"}]}}
+        {"jsonrpc":"2.0","id":3,"result":{"toolCallId":"call_abc","content":[{"type":"text","text":"{\"error\":true,\"code\":\"security_violation\",\"message\":\"Command is denied by security rules\",\"details\":{\"command\":\"rm -rf /\"}}"}],"isError":true}}
         ```
-    *   **Call Tool Response (Approved after waiting):** Send the same call again with `require_user_approval: false`.
-        ```json
-        {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mcp_run_terminal_cmd","id":"call_abc","arguments":{"command":"ls -la","explanation":"List files","is_background":false,"require_user_approval":false}}}
-        ```
-        *(Server sends result for toolCallId `call_abc`)*
 
 4.  **Server Logs:** Diagnostic information is sent to stderr.
 
