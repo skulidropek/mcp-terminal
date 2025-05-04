@@ -1,0 +1,124 @@
+import { v4 as uuid } from "uuid";
+import type { JsonRpcMessage, JsonRpcRequest, JsonRpcResponse } from "./types.js";
+import type { Transport } from "../transport/types.js";
+
+// Интерфейсы для Initialize (упрощенные)
+interface InitializeParams {
+    protocolVersion: string;
+    capabilities: object; // Можно детализировать при необходимости
+    clientInfo: { name: string; version: string };
+}
+
+interface InitializeResult {
+    protocolVersion: string;
+    capabilities: object;
+    serverInfo: { name: string; version: string };
+}
+
+interface RpcError {
+    code: number;
+    message: string;
+    data?: unknown;
+}
+
+export class RpcClient {
+  private pending = new Map<string, (m: JsonRpcResponse) => void>();
+  private initializePromise: Promise<InitializeResult> | null = null;
+  private resolveInitialize: ((result: InitializeResult) => void) | null = null;
+  private rejectInitialize: ((reason?: any) => void) | null = null;
+  private static readonly INITIALIZE_ID = 'client-initialize-handshake';
+
+  constructor(private t: Transport) {
+    // Обработчик сообщений устанавливается сразу
+    t.onMessage((m) => this.handle(m));
+  }
+
+  private handle(m: JsonRpcMessage) {
+      // Проверяем, является ли это ответом на наш запрос initialize
+      if ('id' in m && m.id === RpcClient.INITIALIZE_ID) {
+         const response = m as JsonRpcResponse;
+         if (response.result && this.resolveInitialize) {
+             console.error(`[RpcClient] Received initialize result: ${JSON.stringify(response.result)}`);
+             this.resolveInitialize(response.result as InitializeResult);
+         } else if (response.error && this.rejectInitialize) {
+             // Обработка ошибки инициализации
+             const error = response.error as RpcError;
+             console.error(`[RpcClient] Initialize failed: ${JSON.stringify(error)}`);
+             this.rejectInitialize(new Error(`Initialize failed: ${error.message} (Code: ${error.code})`));
+         }
+         // Сбрасываем обработчики
+         this.resolveInitialize = null;
+         this.rejectInitialize = null;
+         this.initializePromise = null;
+         return; // Больше не обрабатываем это сообщение
+      }
+
+      // Обработка обычных ответов
+      if ("id" in m && this.pending.has(m.id)) {
+        const callback = this.pending.get(m.id)!;
+        this.pending.delete(m.id);
+        callback(m as JsonRpcResponse);
+      }
+  }
+
+  // Метод для выполнения хендшейка
+  async performHandshake(clientName = "mcp-client", clientVersion = "0.1.0"): Promise<InitializeResult> {
+      if (!this.initializePromise) {
+          this.initializePromise = new Promise<InitializeResult>((resolve, reject) => {
+              this.resolveInitialize = resolve;
+              this.rejectInitialize = reject;
+              
+              const params: InitializeParams = {
+                  protocolVersion: "2024-11-05",
+                  capabilities: { experimental: {} },
+                  clientInfo: { name: clientName, version: clientVersion }
+              };
+              const req: JsonRpcRequest = { 
+                  jsonrpc: "2.0", 
+                  id: RpcClient.INITIALIZE_ID,
+                  method: "initialize", 
+                  params 
+              };
+
+              console.error(`[RpcClient] Sending initialize request: ${JSON.stringify(req)}`);
+              this.t.send(req);
+          });
+      }
+      
+      const initResult = await this.initializePromise;
+      
+      const initializedNotification = { 
+          jsonrpc: "2.0", 
+          method: "notifications/initialized", 
+          params: {} 
+      };
+      console.error(`[RpcClient] Sending initialized notification: ${JSON.stringify(initializedNotification)}`);
+      this.t.send(initializedNotification as JsonRpcRequest);
+      
+      return initResult;
+  }
+
+  // Метод для обычных вызовов
+  call(method: string, params: unknown): Promise<JsonRpcResponse> {
+    const id = uuid();
+    const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
+    
+    console.error(`[RpcClient] Sending request: ${JSON.stringify(req)}`);
+    
+    return new Promise((res, rej) => {
+      this.pending.set(id, (response) => {
+          const error = response.error as RpcError | undefined;
+          if (error) {
+              rej(new Error(`RPC Error: ${error.message} (Code: ${error.code})`));
+          } else {
+              res(response);
+          }
+      });
+      this.t.send(req);
+    });
+  }
+
+  close() {
+    this.t.close();
+  }
+} 

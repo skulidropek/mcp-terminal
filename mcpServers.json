@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "ton": {
+      "command": "npx ton-api-mcp --transport stdio --api-key AFPJTKEBPOX3AIYAAAAKA2HWOTRNJP5MUCV5DMDCZAAOCPSAYEYS3CILNQVLF2HWKED6USY"
+    },
+    "mcp-terminal": {
+       "command": "node /home/user/mcp-terminal/dist/server.js --file /home/user/mcp-terminal/autorun.json"
+    },
+    "remoteSseExample": {
+      "command": "sse",
+      "sseUrl": "https://my-mcp.example.com/sse"
+    },
+    "mock": {
+       "command": "node ./mock-mcp-server.js"
+    }
+  }
+} 
