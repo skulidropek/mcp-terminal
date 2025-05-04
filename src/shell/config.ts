@@ -31,26 +31,42 @@ let activeConfig: ApprovalConfig = { ...defaultConfig };
 export function shouldAutoApproveCommand(command: string): boolean {
   const config = activeConfig.autorun_mode;
   
+  // Добавляем отладочные сообщения
+  console.error(`DEBUG-CONFIG: Command check: "${command.substring(0, 30)}..."`);
+  
   if (!config.enabled) {
+    console.error(`DEBUG-CONFIG: Auto-approval disabled`);
     return false;
   }
   
-  // Check denylist first (takes precedence)
+  // Check denylist first (takes precedence) - используем регулярные выражения
   for (const deniedPattern of config.denylist) {
-    if (command.includes(deniedPattern)) {
+    // Создаем регулярное выражение для поиска слова
+    const regex = new RegExp(`\\b${deniedPattern}\\b`, 'i');
+    if (regex.test(command)) {
+      console.error(`DEBUG-CONFIG: Command in denylist (${deniedPattern})`);
       return false;
     }
   }
   
-  // Check allowlist
+  // Если режим allow_all_other_commands включен, и команда не в denylist - автоматически разрешаем
+  if (config.allow_all_other_commands) {
+    console.error(`DEBUG-CONFIG: Using allow_all_other_commands=true`);
+    return true;
+  }
+  
+  // Check allowlist - также используем регулярные выражения
   for (const allowedPattern of config.allowlist) {
+    // Для allowlist можно использовать более гибкую проверку (без границ слов)
     if (command.includes(allowedPattern)) {
+      console.error(`DEBUG-CONFIG: Command in allowlist (${allowedPattern})`);
       return true;
     }
   }
   
-  // If not matched in either list, use the default policy
-  return config.allow_all_other_commands;
+  // По умолчанию запрещаем
+  console.error(`DEBUG-CONFIG: Command not in allowlist, denied by default`);
+  return false;
 }
 
 /**

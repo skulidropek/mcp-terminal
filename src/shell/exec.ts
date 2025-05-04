@@ -24,71 +24,65 @@ const logCommand = (command: string, phase: string, details: any = {}) => {
 export const isCommandDenied = (command: string): boolean => {
     const config = getConfig().autorun_mode;
     
-    // If auto-approval is disabled, only check the blacklist
-    if (!config.enabled) {
-        for (const deniedPattern of config.denylist) {
-            if (command.includes(deniedPattern)) {
-                return true;
-            }
+    console.error(`DEBUG: Checking command: "${command}"`);
+    console.error(`DEBUG: Config: enabled=${config.enabled}, allow_all_other_commands=${config.allow_all_other_commands}`);
+    console.error(`DEBUG: Denylist: ${JSON.stringify(config.denylist)}`);
+    
+    // Максимально упрощенная логика:
+    // 1. Если allow_all_other_commands=true, проверяем ТОЛЬКО denylist
+    // 2. Если команда не в denylist, ВСЕГДА разрешаем
+    
+    // Проверяем только denylist с использованием регулярных выражений для поиска слов
+    for (const deniedPattern of config.denylist) {
+        // Создаем регулярное выражение для поиска слова (с границами слов)
+        const regex = new RegExp(`\\b${deniedPattern}\\b`, 'i');
+        if (regex.test(command)) {
+            console.error(`DEBUG: Command denied - found word pattern "${deniedPattern}" in command`);
+            return true; // Команда запрещена, т.к. содержит запрещенное слово
         }
-        return false;
     }
     
-    // If auto-approval is enabled, use the full logic from shouldAutoApproveCommand
-    // but invert the result (we need to know if the command is denied)
-    return !shouldAutoApproveCommand(command);
+    // Если включен режим allow_all_other_commands, и команда не в denylist - разрешаем
+    if (config.enabled && config.allow_all_other_commands) {
+        console.error(`DEBUG: Command allowed - not in denylist and allow_all_other_commands=true`);
+        return false; // Команда разрешена
+    }
+    
+    // В противном случае используем стандартную логику через shouldAutoApproveCommand
+    if (!config.enabled) {
+        console.error(`DEBUG: Command allowed - autorun_mode is disabled`);
+        return false; // Если autorun_mode выключен, разрешаем все команды, не входящие в denylist
+    }
+    
+    // Проверяем через shouldAutoApproveCommand
+    const result = !shouldAutoApproveCommand(command);
+    console.error(`DEBUG: Using shouldAutoApproveCommand, result: ${result ? 'denied' : 'allowed'}`);
+    return result;
 };
 
 /**
  * Executes a shell command based on the provided arguments.
- * Handles foreground/background execution, timeouts, output truncation,
- * and the require_user_approval flag.
+ * Handles foreground/background execution, timeouts, output truncation.
  *
- * Returns a CommandExecOutcome indicating success, waiting, or error.
+ * Returns a CommandExecOutcome indicating success or error.
  */
 export const executeCommand = async (
     params: RunTerminalCmdArgs
 ): Promise<CommandExecOutcome> => {
 
-    logCommand(params.command, 'requested', { is_background: params.is_background, require_approval: params.require_user_approval, explanation: params.explanation });
+    logCommand(params.command, 'requested', { is_background: params.is_background, explanation: params.explanation });
 
-    // ADDED SECURITY CHECK: Check all commands against security rules
-    // regardless of the require_user_approval parameter
+    // SECURITY CHECK: Check all commands against security rules
     if (isCommandDenied(params.command)) {
-        // If the command is denied but the user is trying to execute without confirmation
-        if (!params.require_user_approval) {
-            logCommand(params.command, 'denied', { explanation: "Command is denied by security rules" });
-            return {
-                status: 'error',
-                error: {
-                    code: 'security_violation',
-                    message: 'Command is denied by security rules',
-                    details: { command: params.command }
-                }
-            };
-        }
-        
-        // If the command is denied and require_user_approval=true, request confirmation
-        logCommand(params.command, 'waiting_for_approval', { reason: "Command is in the deny list" });
+        logCommand(params.command, 'denied', { explanation: "Command is denied by security rules" });
         return {
-            status: 'waiting',
-            result: { status: 'waiting_for_approval' }
+            status: 'error',
+            error: {
+                code: 'security_violation',
+                message: 'Command is denied by security rules',
+                details: { command: params.command }
+            }
         };
-    }
-
-    // Handle approval requirement, checking auto-approval config
-    if (params.require_user_approval) {
-        // Check if this command can be auto-approved based on configuration
-        if (shouldAutoApproveCommand(params.command)) {
-            logCommand(params.command, 'auto_approved', { explanation: "Command matches auto-approval rules" });
-            // Continue execution with auto-approval
-        } else {
-            logCommand(params.command, 'waiting_for_approval');
-            return {
-                status: 'waiting',
-                result: { status: 'waiting_for_approval' }
-            };
-        }
     }
 
     // Background execution: Append '&' and return success immediately

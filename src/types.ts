@@ -36,7 +36,6 @@ export const RunTerminalCmdArgsSchema = z.object({
     .refine(s => !s.includes('\n'), { message: "Command must be a single line." }),
   explanation: z.string().describe('One sentence explaining why the command is needed (logged and sent to the client).'),
   is_background: z.boolean().describe('true → run with &, server DOES NOT wait for completion; false → wait.'),
-  require_user_approval: z.boolean().describe('If true, server DOES NOT execute the command, but returns waiting_for_approval status. Client must send another request with require_user_approval=false to execute.'),
 });
 
 export type RunTerminalCmdArgs = z.infer<typeof RunTerminalCmdArgsSchema>;
@@ -51,11 +50,6 @@ export interface CommandExecSuccessResult {
   truncated?: boolean; // Present and true if output was truncated
 }
 
-// Result for waiting for approval (will be stringified in MCP response)
-export interface CommandExecWaitingResult {
-  status: 'waiting_for_approval';
-}
-
 // Result for command error (will be stringified in MCP error response)
 export interface CommandExecErrorResult {
     message: string;
@@ -66,7 +60,6 @@ export interface CommandExecErrorResult {
 // Union type for the possible outcomes of attempting to execute a command
 export type CommandExecOutcome =
   | { status: 'success', result: CommandExecSuccessResult }
-  | { status: 'waiting', result: CommandExecWaitingResult }
   | { status: 'error', error: CommandExecErrorResult };
 
 // --- SSE Message Types ---
