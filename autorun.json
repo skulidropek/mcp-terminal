@@ -1,0 +1,8 @@
+{
+    "autorun_mode": {
+      "enabled": true,
+      "allowlist": ["ls", "echo", "cat"],
+      "denylist": ["rm", "git commit", "git push", "git add"],
+      "allow_all_other_commands": true
+    }
+  }

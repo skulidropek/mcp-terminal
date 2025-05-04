@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  mcp-terminal:
+    build: .
+    # Remove ports section as it's a stdio server
+    # ports:
+    #   - "8000:8000"
+    environment:
+      # Set environment variables if needed, e.g., SESSION_SECRET
+      # SESSION_SECRET: your_production_secret
+      NODE_ENV: production # Ensures production optimizations and security settings
+    # Add tty and stdin_open for interactive stdio communication
+    tty: true
+    stdin_open: true
+    # Optional: Add volumes for development if needed
+    # volumes:
+    #   - ./src:/app/src # Map source code for live reload (requires ts-node-dev or similar in container)
