@@ -7,7 +7,7 @@ import path from 'path'; // Импортируем модуль path
 interface ToolInfo {
     name: string;
     description?: string;
-    // inputSchema можно добавить при необходимости, но для промпта может быть избыточным
+    inputSchema?: any; // Adding inputSchema field to store the full schema
 }
 
 interface ServerTools {
@@ -51,7 +51,8 @@ async function getToolsFromServer(serverName: string, config: ServerConfig): Pro
         if (Array.isArray(toolsList)) {
              const toolsInfo: ToolInfo[] = toolsList.map((tool: any) => ({
                  name: tool.name || 'Unnamed Tool',
-                 description: tool.description || 'No description provided.'
+                 description: tool.description || 'No description provided.',
+                 inputSchema: tool.inputSchema || null // Capture the full input schema
              }));
              console.error(`   [${serverName}] Found ${toolsInfo.length} tools.`);
             // Успех! Закрываем клиент перед возвратом
@@ -101,7 +102,8 @@ async function generatePrompt() {
     console.error("\n--- Formatting Prompt ---");
     let prompt = "# Available MCP Tools\n\n";
     prompt += "This document describes the MCP (Model Context Protocol) tools available in the current project, fetched from configured servers.\n\n";
-    prompt += "You can call these tools using the CLI client:\n`node dist/client/index.js <server_name> <tool_name> [arguments...]`\n\n";
+    prompt += "MCP provides a standardized way for Cursor Agent to communicate with external tools and services.\n\n";
+    prompt += "You can call these tools using the CLI client:\n`cd /home/user/mcp-terminal && node dist/client/index.js <server_name> <tool_name> [arguments...]`\n\n";
 
     for (const result of results) {
         prompt += `## Server: ${result.serverName}\n`;
@@ -111,6 +113,37 @@ async function generatePrompt() {
             result.tools.forEach(tool => {
                 prompt += `*   **${tool.name}**\n`;
                 prompt += `    *   Description: ${tool.description || 'N/A'}\n`;
+                
+                // Add detailed schema information if available
+                if (tool.inputSchema) {
+                    prompt += `    *   Parameters:\n`;
+                    try {
+                        // Handle different schema formats
+                        const properties = tool.inputSchema.properties || {};
+                        const required = tool.inputSchema.required || [];
+                        
+                        for (const [paramName, paramDetails] of Object.entries(properties)) {
+                            const typedParamDetails = paramDetails as { 
+                                type?: string; 
+                                description?: string;
+                                enum?: any[];
+                            };
+                            
+                            const isRequired = required.includes(paramName) ? ' (Required)' : '';
+                            const paramType = typedParamDetails.type || 'any';
+                            const paramDesc = typedParamDetails.description || 'No description';
+                            
+                            prompt += `        * \`${paramName}\`${isRequired}: ${paramType} - ${paramDesc}\n`;
+                            
+                            // If there are enum values, add them
+                            if (typedParamDetails.enum) {
+                                prompt += `          Allowed values: ${typedParamDetails.enum.map((v: any) => `\`${v}\``).join(', ')}\n`;
+                            }
+                        }
+                    } catch (e) {
+                        prompt += `        * Schema parsing error: ${e}\n`;
+                    }
+                }
                 
                 // Генерируем пример вызова
                 let exampleArgs = '';
@@ -128,7 +161,7 @@ async function generatePrompt() {
                     exampleArgs = `[args...]`; 
                 }
                 
-                prompt += `    *   Example CLI Call: \`node dist/client/index.js ${result.serverName} ${tool.name} ${exampleArgs}\`\n`;
+                prompt += `    *   Example CLI Call: \`cd /home/user/mcp-terminal && node dist/client/index.js ${result.serverName} ${tool.name} ${exampleArgs}\`\n`;
             });
         } else {
             prompt += `*   No tools found or reported by the server.\n`;
