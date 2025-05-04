@@ -3,13 +3,11 @@ description:
 globs: 
 alwaysApply: true
 ---
-Ты работаешь только с инструментов mcp_run_terminal_cmd
-У тебя есть возможность юзать все команды терминала с помощью mcp_run_terminal_cmd (curl, ls, cat и другие для решения разных задач)
-Все команды желательно выполнять в неинтерактивном режиме (| cat)
-
 # Available MCP Tools
 
 This document describes the MCP (Model Context Protocol) tools available in the current project, fetched from configured servers.
+
+MCP provides a standardized way for Cursor Agent to communicate with external tools and services.
 
 You can call these tools using the CLI client:
 `cd /home/user/mcp-terminal && node dist/client/index.js <server_name> <tool_name> [arguments...]`
@@ -17,24 +15,34 @@ You can call these tools using the CLI client:
 ## Server: ton
 *   **call_method**
     *   Description: Call TON API method from any module. Specify module and method names. Parameters can be passed as a JSON object in 'params' or as array in 'args'. Query data similar to https://tonscan.org or https://tonviewer.com explorers. Example: view account at https://testnet.tonscan.org/address/EQBInPs62kcCSGDwnCTx0FLzgNpu_t6sTca-mOXInYPBISzT
+    *   Parameters:
+        * `module` (Required): string - Name of the TON API module
+        * `method` (Required): string - Name of the method to call
+        * `params`: object - Parameters to pass to the method (JSON object). For account-related operations, provide the address in format seen on TONScan (e.g., EQBInPs62kcCSGDwnCTx0FLzgNpu_t6sTca-mOXInYPBISzT)
+        * `args`: array - Additional arguments (array)
+        * `network`: string - Network to use (mainnet or testnet). Use testnet for addresses shown on https://testnet.tonscan.org/
+          Allowed values: `mainnet`, `testnet`
     *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js ton call_method '{"module": "blockchain", "method": "getAccount", "params": {"account_id": "<some_ton_address>"}}'`
 *   **list_modules**
     *   Description: List all TON API modules. Includes 'blockchain' for data shown on https://tonscan.org, 'accounts' for wallet info as displayed on https://tonviewer.com.
+    *   Parameters:
+        * `network`: string - Network to use (mainnet or testnet). Specifies whether to list modules available on https://tonscan.org/ (mainnet) or https://testnet.tonscan.org/ (testnet)
+          Allowed values: `mainnet`, `testnet`
     *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js ton list_modules `
 *   **list_methods**
     *   Description: List all methods in a specific TON API module. Get methods for querying data that appears on https://tonscan.org or https://tonviewer.com explorers.
+    *   Parameters:
+        * `module` (Required): string - Name of the TON API module to list methods for. Common modules include "blockchain" (similar to data on https://tonviewer.com/) and "accounts" (wallet info as on https://tonscan.org/)
+        * `network`: string - Network to use (mainnet or testnet). Affects which methods are available and how they should be called
+          Allowed values: `mainnet`, `testnet`
     *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js ton list_methods '{"module": "blockchain"}'`
 
 ## Server: mcp-terminal
 *   **mcp_run_terminal_cmd**
     *   Description: Execute a shell command locally. Handles foreground/background execution.
+    *   Parameters:
+        * `command` (Required): string - Complete, single-line shell command. No line breaks.
+        * `explanation` (Required): string - One sentence explaining why the command is needed (logged and sent to the client).
+        * `is_background` (Required): boolean - true → run with &, server DOES NOT wait for completion; false → wait.
     *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js mcp-terminal mcp_run_terminal_cmd '{"command":"ls -la","explanation":"List files","is_background":false}'`
-
-## Server: python-time
-*   **get_current_time**
-    *   Description: Get current time in a specific timezones
-    *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js && cd /home/user/mcp-terminal && node dist/client/index.js python-time get_current_time [args...]`
-*   **convert_time**
-    *   Description: Convert time between timezones
-    *   Example CLI Call: `cd /home/user/mcp-terminal && node dist/client/index.js && cd /home/user/mcp-terminal && node dist/client/index.js python-time convert_time [args...]`
 

@@ -1,13 +1,10 @@
 {
   "mcpServers": {
     "ton": {
-      "command": "npx ton-api-mcp --api-key AFPJTKEBPOX3AIYAAAAKA2HWOTRNJP5MUCV5DMDCZAAOCPSAYEYS3CILNQVLF2HWKED6USY --modules blockchain --testnet"
+      "command": "npx ton-api-mcp --api-key AFPJTKEBPOX3AIYAAAAKA2HWOTRNJP5MUCV5DMDCZAAOCPSAYEYS3CILNQVLF2HWKED6USY --modules blockchain"
     },
     "mcp-terminal": {
        "command": "node /home/user/mcp-terminal/dist/server.js --file /home/user/mcp-terminal/autorun.json"
-    },
-    "python-time": { 
-       "command": "cd /home/user/mcp-terminal && .venv/bin/python -m mcp_server_time --local-timezone=America/New_York"
     }
   }
 } 
