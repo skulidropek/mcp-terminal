@@ -16,73 +16,47 @@ try {
 
 program
   .name("mcp")
-  .usage("<server> <method> [args...]")
+  .usage("<server> <tool_name> [json_arguments]")
   .argument("<server>", "server name from mcpServers.json")
-  .argument("<method>", "method to call (e.g., tools/list, call_method, ping)")
-  .argument("[args...]", "arguments after method")
-  .action(async (server, method, args: string[]) => {
-    console.error("--- Loaded MCP Server Configurations ---");
-    const allServers = ConfigManager.getAllServers();
-    for (const serverName in allServers) {
-        console.error(`${serverName}:`, JSON.stringify(allServers[serverName]));
-    }
-    console.error("----------------------------------------");
-    
-    let client: RpcClient | null = null; // Объявляем заранее для блока finally
+  .argument("<tool_name>", "tool name to call (e.g., tools/list, call_method)")
+  .argument("[json_arguments]", "Optional JSON string with arguments for the tool")
+  .action(async (server, toolName, jsonArguments: string | undefined) => {
+    let client: RpcClient | null = null; 
     
     try {
       const cfg = ConfigManager.get(server); 
-      console.error(`\nAttempting to use server '${server}' with config:`, JSON.stringify(cfg));
       
       const transport = createTransport(cfg);
-      client = new RpcClient(transport); // Присваиваем здесь
+      client = new RpcClient(transport); 
       
-      // === ВЫПОЛНЯЕМ ХЕНДШЕЙК ===
-      console.error(`\nPerforming MCP handshake with server '${server}'...`);
-      const serverInfo = await client.performHandshake("mcp-cli-client", "0.2.0"); // Используем инфо из лога
-      console.error(`\nHandshake successful! Server info: ${JSON.stringify(serverInfo)}`);
-      // =============================
+      const serverInfo = await client.performHandshake("mcp-cli-client", "0.2.0"); 
       
-      let params: unknown; // Определяем переменную для параметров
-
-      // === Интеллектуальная обработка параметров ===
-      if (method === 'call_method') {
-        if (args.length > 0) {
+      let toolArguments: unknown = {}; 
+      
+      if (jsonArguments) {
           try {
-            params = JSON.parse(args[0]);
-            console.error(`\nCalling method '${method}' on server '${server}' with parsed JSON params:`, params);
+              toolArguments = JSON.parse(jsonArguments);
           } catch (parseError) {
-             console.error(`\nWarning: Failed to parse first argument as JSON for call_method. Using raw arguments. Error: ${parseError}`);
-            params = { args };
-            console.error(`\nCalling method '${method}' on server '${server}' with raw args:`, args);
+              console.error(`\nError: Failed to parse JSON arguments: ${parseError}`);
+              console.error(`Provided arguments string: ${jsonArguments}`);
+              process.exit(1);
           }
-        } else {
-           console.error(`\nError: 'call_method' requires a JSON parameter string as the first argument.`);
-           process.exit(1); // Выходим с ошибкой, если нет аргумента для call_method
-        }
-      } else if (method === 'tools/list') {
-         // Для tools/list параметры {}, согласно логу
-         params = {};
-         console.error(`\nCalling method '${method}' on server '${server}' with params: {}`);
-      } else {
-        // Поведение по умолчанию для всех остальных методов (например, ping)
-        params = { args };
-        console.error(`\nCalling method '${method}' on server '${server}' with default args:`, args);
       }
-      // =============================================
 
-      const resp = await client.call(method, params); 
+      const paramsForToolCall = {
+          name: toolName,      
+          arguments: toolArguments 
+      };
       
-      console.error(`\nReceived response from '${server}':`, JSON.stringify(resp));
-      console.log(JSON.stringify(resp, null, 2)); // Вывод основного результата в stdout
+      const resp = await client.call('tools/call', paramsForToolCall); 
+      
+      console.log(JSON.stringify(resp, null, 2));
 
     } catch (e) {
       console.error(`\nError during execution for server '${server}':`, String(e));
       process.exit(1);
     } finally {
-        // Убедимся, что клиент закрывается в любом случае
         if (client) {
-            console.error("\nClosing client connection.");
             client.close();
         }
     }

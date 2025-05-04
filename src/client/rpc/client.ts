@@ -27,6 +27,7 @@ export class RpcClient {
   private resolveInitialize: ((result: InitializeResult) => void) | null = null;
   private rejectInitialize: ((reason?: any) => void) | null = null;
   private static readonly INITIALIZE_ID = 'client-initialize-handshake';
+  private closed = false; // Флаг состояния соединения
 
   constructor(private t: Transport) {
     // Обработчик сообщений устанавливается сразу
@@ -34,26 +35,23 @@ export class RpcClient {
   }
 
   private handle(m: JsonRpcMessage) {
-      // Проверяем, является ли это ответом на наш запрос initialize
+      if (this.closed) {
+          return;
+      }
       if ('id' in m && m.id === RpcClient.INITIALIZE_ID) {
          const response = m as JsonRpcResponse;
          if (response.result && this.resolveInitialize) {
-             console.error(`[RpcClient] Received initialize result: ${JSON.stringify(response.result)}`);
              this.resolveInitialize(response.result as InitializeResult);
          } else if (response.error && this.rejectInitialize) {
-             // Обработка ошибки инициализации
              const error = response.error as RpcError;
-             console.error(`[RpcClient] Initialize failed: ${JSON.stringify(error)}`);
              this.rejectInitialize(new Error(`Initialize failed: ${error.message} (Code: ${error.code})`));
          }
-         // Сбрасываем обработчики
          this.resolveInitialize = null;
          this.rejectInitialize = null;
          this.initializePromise = null;
-         return; // Больше не обрабатываем это сообщение
+         return;
       }
 
-      // Обработка обычных ответов
       if ("id" in m && this.pending.has(m.id)) {
         const callback = this.pending.get(m.id)!;
         this.pending.delete(m.id);
@@ -80,7 +78,6 @@ export class RpcClient {
                   params 
               };
 
-              console.error(`[RpcClient] Sending initialize request: ${JSON.stringify(req)}`);
               this.t.send(req);
           });
       }
@@ -92,7 +89,6 @@ export class RpcClient {
           method: "notifications/initialized", 
           params: {} 
       };
-      console.error(`[RpcClient] Sending initialized notification: ${JSON.stringify(initializedNotification)}`);
       this.t.send(initializedNotification as JsonRpcRequest);
       
       return initResult;
@@ -102,8 +98,6 @@ export class RpcClient {
   call(method: string, params: unknown): Promise<JsonRpcResponse> {
     const id = uuid();
     const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
-    
-    console.error(`[RpcClient] Sending request: ${JSON.stringify(req)}`);
     
     return new Promise((res, rej) => {
       this.pending.set(id, (response) => {
@@ -118,7 +112,31 @@ export class RpcClient {
     });
   }
 
+  // Новый метод для проверки состояния
+  isClosed(): boolean {
+      return this.closed;
+  }
+
   close() {
-    this.t.close();
+    if (!this.closed) {
+        this.closed = true; // Сначала устанавливаем флаг, чтобы handle перестал обрабатывать
+        try {
+            this.t.close(); // Закрываем транспорт
+        } catch (e) {
+             console.error(`[RpcClient] Error closing transport: ${e}`);
+        }
+        // Очищаем ожидающие запросы с ошибкой
+        this.pending.forEach((callback, id) => {
+            callback({ jsonrpc: "2.0", id: id, error: { code: -32000, message: "Client connection closed" } });
+        });
+        this.pending.clear();
+        // Сбрасываем промис инициализации, если он еще активен
+        if (this.rejectInitialize) {
+            this.rejectInitialize(new Error("Client connection closed during handshake"));
+            this.resolveInitialize = null;
+            this.rejectInitialize = null;
+            this.initializePromise = null;
+        }
+    }
   }
 } 

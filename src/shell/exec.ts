@@ -24,40 +24,26 @@ const logCommand = (command: string, phase: string, details: any = {}) => {
 export const isCommandDenied = (command: string): boolean => {
     const config = getConfig().autorun_mode;
     
-    console.error(`DEBUG: Checking command: "${command}"`);
-    console.error(`DEBUG: Config: enabled=${config.enabled}, allow_all_other_commands=${config.allow_all_other_commands}`);
-    console.error(`DEBUG: Denylist: ${JSON.stringify(config.denylist)}`);
-    
-    // Максимально упрощенная логика:
-    // 1. Если allow_all_other_commands=true, проверяем ТОЛЬКО denylist
-    // 2. Если команда не в denylist, ВСЕГДА разрешаем
-    
     // Проверяем только denylist с использованием регулярных выражений для поиска слов
     for (const deniedPattern of config.denylist) {
-        // Создаем регулярное выражение для поиска слова (с границами слов)
         const regex = new RegExp(`\\b${deniedPattern}\\b`, 'i');
         if (regex.test(command)) {
-            console.error(`DEBUG: Command denied - found word pattern "${deniedPattern}" in command`);
             return true; // Команда запрещена, т.к. содержит запрещенное слово
         }
     }
     
     // Если включен режим allow_all_other_commands, и команда не в denylist - разрешаем
     if (config.enabled && config.allow_all_other_commands) {
-        console.error(`DEBUG: Command allowed - not in denylist and allow_all_other_commands=true`);
         return false; // Команда разрешена
     }
     
     // В противном случае используем стандартную логику через shouldAutoApproveCommand
     if (!config.enabled) {
-        console.error(`DEBUG: Command allowed - autorun_mode is disabled`);
         return false; // Если autorun_mode выключен, разрешаем все команды, не входящие в denylist
     }
     
     // Проверяем через shouldAutoApproveCommand
-    const result = !shouldAutoApproveCommand(command);
-    console.error(`DEBUG: Using shouldAutoApproveCommand, result: ${result ? 'denied' : 'allowed'}`);
-    return result;
+    return !shouldAutoApproveCommand(command);
 };
 
 /**
